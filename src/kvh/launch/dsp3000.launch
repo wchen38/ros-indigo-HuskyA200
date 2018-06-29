@@ -1,0 +1,5 @@
+<launch>
+    <node pkg="kvh" type="dsp3000" name="dsp3000" respawn="true">
+        <param name="port" type="string" value="/dev/ttyUSB3"/>
+    </node>
+</launch>

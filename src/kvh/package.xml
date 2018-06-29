@@ -1,0 +1,28 @@
+<package>
+  <name>kvh</name>
+  <version>1.0.3</version>
+  <description>A driver for the KVH DSP-3000 single-axis Fiber Optic Gyroscope.</description>
+  <maintainer email="geoffrey.viola@asirobots.com">Geoffrey Viola</maintainer>
+
+  <license>BSD</license>
+
+  <url type="website">http://www.ros.org/wiki/kvh</url>
+
+  <author>Jeff Schmidt</author>
+  <author>Geoffrey Viola</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>roscpp</build_depend>
+  <build_depend>roslint</build_depend>
+  <build_depend>roslaunch</build_depend>
+  <build_depend>std_msgs</build_depend>
+
+  <run_depend>roscpp</run_depend>
+  <run_depend>std_msgs</run_depend>
+
+<export>
+    <cpp lflags="-L${prefix}/lib -Wl,-rpath,${prefix}/lib -ldsp3000" cflags="-I${prefix}/include"/>
+</export>
+
+</package>

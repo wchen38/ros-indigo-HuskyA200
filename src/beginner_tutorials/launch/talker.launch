@@ -1,0 +1,5 @@
+<launch>
+     <env name="ROSCONSOLE_CONFIG_FILE"
+          value="$(find beginner_tutorials)/custom_rosconsole.conf"/>
+     <node pkg="beginner_tutorials" name="talker" type="talker" output="screen"/>
+</launch>
