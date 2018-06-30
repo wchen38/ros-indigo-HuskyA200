@@ -1,6 +1,7 @@
 #include <ros/ros.h>
 #include <geometry_msgs/Twist.h>
 #include <stdlib.h>
+#include <sstream>
 
 int main(int argc, char **argv) {
 //Initializes ROS, and sets up a node
@@ -21,9 +22,15 @@ ros::Rate rate(10);
     //Declares the message to be sent
     geometry_msgs::Twist msg;
     //Random x value between -2 and 2
-    msg.linear.x=4*double(rand())/double(RAND_MAX)-2;
+    //msg.linear.x=4*double(rand())/double(RAND_MAX)-2;
+    msg.linear.x= 0.1;
     //Random y value between -3 and 3
-    msg.angular.z=6*double(rand())/double(RAND_MAX)-3;
+    //msg.angular.z=6*double(rand())/double(RAND_MAX)-3;
+    //positive ccw turn 
+    //neg cw turn
+    msg.angular.z=0;
+
+    ROS_INFO("x: %6.4lf, z: %6.4lf", msg.linear.x, msg.angular.z);
     //Publish the message
     pub.publish(msg);
 
