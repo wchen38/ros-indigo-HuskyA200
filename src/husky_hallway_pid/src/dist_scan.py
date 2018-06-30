@@ -4,9 +4,11 @@ import math
 from std_msgs.msg import String
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
+from husky_hallway_pid.msg import pid_input
 
-#pub = rospy.Publisher('pid_error', pid_input, queue_size=10)
-dist = 0;
+pub = rospy.Publisher('pid_error', pid_input, queue_size=10)
+dist = 0
+AC = 1
 def odomCallback(msg):
 	global dist
 	dist = dist + msg.linear.x;
@@ -14,6 +16,7 @@ def odomCallback(msg):
 
 def callback(msg):
 	global dist
+	global AC
 	#code for finding the distance between wall and robot 
 	#at zero degrees and 180 degrees
 	theta = math.pi/4						#45 degrees in radians 
@@ -23,21 +26,20 @@ def callback(msg):
 	desire_dist = abs(range_180_deg - b)	# center of the hallway
 	
 	#calculating the error after driving for about 1 meter
-	if dist >= 1:
-		AC = dist
-		alpha = math.atan((a*math.cos(theta)-b)/(a*math.sin(theta)))
-		AB = b*math.cos(alpha)
-		CD = AB + AC*math.sin(alpha)
-		error = CD - desire_dist 
-
-		
-		dist = 0							#reset travel distance
+	alpha = math.atan((a*math.cos(theta)-b)/(a*math.sin(theta)))
+	AB = b*math.cos(alpha)
+	CD = AB + AC*math.sin(alpha)
+	error = CD - desire_dist  
+	pid_msg = pid_input()
+	pid_msg.pid_error = error
+	pub.publish(pid_msg)		
+	dist = 0							#reset travel distance
 
 
 if __name__ == '__main__':
 	
-	print("Laser node started")
+	print("Laser node started to scan for distance...")
 	rospy.init_node('dist_scan',anonymous = True)
-	rospy.Subscriber("husky_velocity_controller/cmd_vel",Twist,odomCallback)
+	#rospy.Subscriber("husky_velocity_controller/cmd_vel",Twist,odomCallback)
 	rospy.Subscriber("scan",LaserScan,callback)
 	rospy.spin()
