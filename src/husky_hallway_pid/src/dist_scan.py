@@ -8,14 +8,13 @@ from husky_hallway_pid.msg import pid_input
 
 pub = rospy.Publisher('pid_error', pid_input, queue_size=10)
 dist = 0
-AC = 1
+AC = 1.5
 def odomCallback(msg):
 	global dist
 	dist = dist + msg.linear.x;
 	
 
 def callback(msg):
-	global dist
 	global AC
 	#code for finding the distance between wall and robot 
 	#at zero degrees and 180 degrees
