@@ -22,7 +22,7 @@ def callback(msg):
 	b = msg.ranges[0] 						# zero degrees
 	a = msg.ranges[179]						# 45 degrees
 	range_180_deg = msg.ranges[719] 		# 180 degrees
-	desire_dist = abs(range_180_deg - b)	# center of the hallway
+	desire_dist = 0.6#abs(range_180_deg - b)	# center of the hallway
 	
 	#calculating the error after driving for about 1 meter
 	alpha = math.atan((a*math.cos(theta)-b)/(a*math.sin(theta)))
