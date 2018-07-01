@@ -9,6 +9,7 @@ MAX_NEG_STEERING_ANGLE = -30*math.pi/180
 
 kp = 14.0
 kd = 0.09
+VELOCITY = 0.3
 prev_error = 0
 #steering_angle = 18
 
@@ -35,7 +36,7 @@ def controlCallback(msg):
 		steering_angle = MAX_NEG_STEERING_ANGLE
 
 	control_msg = Twist()
-	control_msg.linear.x = 0.5
+	control_msg.linear.x = VELOCITY
 	#if abs(steering_angle) <= 2.79253:
 	control_msg.angular.z = steering_angle
 	
