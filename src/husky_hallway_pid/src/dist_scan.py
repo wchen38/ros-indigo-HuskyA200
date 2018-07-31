@@ -20,7 +20,7 @@ def callback(msg):
 	#at zero degrees and 180 degrees
 	theta = math.pi/4						#45 degrees in radians 
 	b = msg.ranges[0] 						# zero degrees
-	print b
+	#print b
 	a = msg.ranges[179]						# 45 degrees
 	range_180_deg = msg.ranges[719] 		# 180 degrees
 	desire_dist = 0.6#abs(range_180_deg - b)	# center of the hallway
