@@ -20,11 +20,13 @@ predicted_cov = 0
 pose_estimate = pose_msg()
 Vt = 0 				#noise in motion model
 
+#for plotting
 x_updated = []
 y_updated = []
-
 x_odom = []
 y_odom = []
+x_filtered = []
+y_filtered = []
 
 
 #create a publisher
@@ -80,7 +82,7 @@ def meas_update_step(msg):
 	innovation = ave_meas_dist - expected_meas
 	
 	#measurement noise 
-	Qt = 0.005
+	Qt = 0.5
 
 	#measurement jacobian
 	H = numpy.array([[9999, 0 , 0],[0, 1, 0],[0 , 0, 9999]])
@@ -135,7 +137,36 @@ def laser_scan_estimate(msg):
 		#print ave_meas_dist
 
 
+def get_filtered_pose(msg):
+	global x_filtered, y_filtered
+	
+	x_filtered.append(msg.pose.pose.position.x)
+	y_filtered.append(msg.pose.pose.position.y)
 
+
+
+def plot_data():
+	# Plotting the predicted and updated state estimates as well as the uncertainty ellipse to see if 
+	# filter is behaving as expected. 
+
+	fig = plt.figure(1)
+	ax = fig.gca()
+	plt.axis('equal')
+	ax1 = plt.gca()
+
+	# Updated state estimate: 
+
+	plt.ion()
+	plt.show()
+
+	# Update is plotted as blue points. 
+	plt.plot(x_updated,y_updated,'b*')
+	plt.plot(x_odom, y_odom, 'r')
+	plt.plot(x_filtered, y_filtered, 'g')
+	plt.ylabel("y")
+	plt.xlabel("x")
+
+	plt.savefig('./plots/plot1.pdf')
 
 
 
@@ -156,28 +187,10 @@ def main():
 	#this is being called at 40hz or 0.025 ms
 	rospy.Timer(rospy.Duration(0.025), meas_update_step, oneshot=False)
 
+	rospy.Subscriber('/odometry/filtered', Odometry, get_filtered_pose)
 
-def plot_data():
-	# Plotting the predicted and updated state estimates as well as the uncertainty ellipse to see if 
-	# filter is behaving as expected. 
 
-	fig = plt.figure(1)
-	ax = fig.gca()
-	plt.axis('equal')
-	ax1 = plt.gca()
 
-	# Updated state estimate: 
-
-	plt.ion()
-	plt.show()
-
-	# Update is plotted as blue points. 
-	plt.plot(x_updated,y_updated,'b*')
-	plt.plot(x_odom, y_odom, 'r*')
-	plt.ylabel("y")
-	plt.xlabel("x")
-
-	plt.savefig('./plots/plot1.pdf')
 
 
 if __name__ == '__main__':
