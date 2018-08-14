@@ -25,7 +25,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 -->
 <launch>
 
-  <arg name="world_name" default="$(find custom_husky_gazebo)/worlds/husky_landmark.world"/>
+  <arg name="world_name" default="$(find custom_husky_gazebo)/worlds/custom_play_pin.world"/>
 
   <arg name="laser_enabled" default="$(optenv HUSKY_LASER_ENABLED true)"/>
   <arg name="hokuyo_enabled" default="$(optenv HUSKY_LASER_ENABLED false)"/>
