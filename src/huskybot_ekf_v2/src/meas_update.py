@@ -2,6 +2,7 @@
 import rospy
 import math
 import numpy
+import time
 import matplotlib.pyplot as plt
 
 from std_msgs.msg import String
@@ -36,7 +37,7 @@ line_features = LineSegmentList()
 my_list = list()
 time_counter = 0
 curr_time_index = 0
-flag = 1
+flag = 0
 
 m = [
 			[0.91, -1.95],
@@ -113,30 +114,103 @@ def odom_state_prediction(msg):
 
 
 def meas_update_step(msg):
+
+	start_time = time.time()
 	global curr_time_index, m, NUMBER_OF_LANDMARKS
 	global 	x_updated
 	global y_updated
 	global pub
 	global predicted_cov	#predicted covariance 
-	if(len(my_list) >= 1):
+	test_count = 0
+	old_time_index = 0
+	if( (len(my_list) >= 1)):
 		#print "curr_time_inex: ", curr_time_index
+		
 		curr_feature = my_list[curr_time_index]
 
-		for i in range(0,len(curr_feature)-1):
 
+		#print "******************"
+		feature_len = len(curr_feature)
+
+		feature1_temp = curr_feature[0].end
+		feature2_temp = curr_feature[feature_len-1].end
+
+		feature1 = [feature1_temp[0], feature1_temp[1]*-1]
+		feature2 = [feature2_temp[0], feature2_temp[1]*-1]
+
+		point_fea = numpy.array([feature1,
+								feature2
+								])
+		print "*******************"
+		#print point_fea
+		for i in range(0,len(point_fea)):
+			
+			
 			maxJ = 0
 			landmarkIndex = 0
 			H1 = numpy.zeros((2, 3, NUMBER_OF_LANDMARKS))
 	 		expected_meas1 = numpy.zeros((2,1, NUMBER_OF_LANDMARKS))
 	 		innovation_cov1 = numpy.zeros((2,2, NUMBER_OF_LANDMARKS))
 
+
+			#find the slop of the line feature
+			robot_x = predicted_pose.x
+			robot_y = predicted_pose.y
+			feature_start = curr_feature[i].start
+			feature_end = curr_feature[i].end
+
+			p1 = [feature_start[0], feature_start[1]*-1]
+			p2 = [feature_end[0], feature_end[1]*-1]
+			
+			print "p1: ", p1
+			print "p2: ", p2
+
+			#slope = (y2 - y1)/(x2 - x1)
+			feature_slope = (p2[1] - p1[0]) / (p2[0] - p1[0])
+			#print "feature_slope = ", feature_slope
+			# slope intercept form y = mx+b => b= y - mx
+			feature_intercept = p1[1] - feature_slope*p1[0]
+			#print "feature_intercept = ", feature_intercept
+			#slope of the perpendicular line, negative reciprocal of the original line
+			perp_line_slope = -1/feature_slope
+			#print "perp_line_slope = ", perp_line_slope
+
+			perp_line_intercept = 0 - perp_line_slope*0
+
+			#set the two line equation equal to each other and find x which is where 
+			#both line cross
+			point_feature_x = (perp_line_intercept - feature_intercept) / (feature_slope - perp_line_slope)
+			point_feature_y = (perp_line_slope*point_feature_x) + perp_line_intercept
+			
+			xx1 = point_feature_x - robot_x
+			yy1 = point_feature_y - robot_y
+
+			feature_range1 = math.sqrt(math.pow(xx1,2)  + math.pow(yy1,2))
+			feature_bearing1 = math.atan2(yy1,xx1)
+			
+			#print "range1: ", feature_range1
+			#print "bearing1: ", feature_bearing1
+			#----------------------------------new code for end point feather range and bearing --------------
+			xx = point_fea[i][0]-robot_x
+			yy = point_fea[i][1]-robot_y
+			feature_range = math.sqrt(math.pow(xx,2)  + math.pow(yy,2))
+			feature_bearing = math.atan2(yy,xx)
+			#print "range: ", feature_range
+			#print "bearing: ",feature_bearing
+			
+
 	 		line_radius = curr_feature[i].radius
 			line_angle = curr_feature[i].angle
+			print "radius: ", line_radius
+			print "angle: ", line_angle
 			obs_meas = numpy.array([[line_radius],
 									[line_angle]
 									])
 			#print "******************"
 			for k in range(0, len(m)):
+
+				
+				
 				mkx = m[k][0]
 				mky = m[k][1]
 				posex = predicted_pose.x
@@ -148,6 +222,10 @@ def meas_update_step(msg):
 				
 				q = distx + disty
 				angle = math.atan2(mky-posey, mkx-posex) - poseth
+
+				#print "--------------------"
+				#print "q: ", q
+				#print "angle: ", angle
 
 				expected_meas1[:,:,k] = numpy.array([[math.sqrt(q)],
 											[angle]
@@ -172,6 +250,8 @@ def meas_update_step(msg):
 				
 				temp5 = numpy.dot(-1/2*numpy.transpose(innovation1), numpy.linalg.inv(numpy.squeeze(innovation_cov1[:,:,k])))
 				temp6 = numpy.dot(temp5, innovation1)
+				#print "innovation cov1: "
+				#print innovation_cov1[:,:,k]
 				temp7 = math.sqrt(numpy.linalg.det(2*math.pi*numpy.squeeze(innovation_cov1[:,:,k])))
 				thisJ =temp7 * math.exp(temp6[0][0])
 
@@ -180,53 +260,29 @@ def meas_update_step(msg):
 					maxJ = thisJ
 					landmarkIndex = k
 
-				#print innovation_cov1[:,:,k]
-			#print "landmarkIndex: ",landmarkIndex
-			#print "mkx: ", mkx
-			#print "mky: ", mky
-			#print "obs_meas: "
-			#print obs_meas
-			#print "******************"
+			temp11 = numpy.dot(predicted_cov, numpy.transpose(numpy.squeeze(H1[:,:,k])))
+			kalman_gain = numpy.dot(temp11,numpy.linalg.inv(innovation_cov1[:,:,k]))
+			updated_pose =  numpy.array([predicted_pose.x, predicted_pose.y, predicted_pose.theta]) + numpy.dot(kalman_gain, innovation1)
+			#print "shape: " 
+			#print 
+			#predicted_cov= (numpy.identity(3) - numpy.dot(kalman_gain,H1[:,:,k]))*predicted_cov
+			#print "prediected_cov"
+			#print predicted_cov
+		#print "******************"
+		curr_time_index = time_counter - 1
+		
+		pose_estimate = pose_msg(updated_pose[0], updated_pose[1], updated_pose[2])
+
+		#publish the estiamted pose
+		pub.publish(pose_estimate)
 
 
-
-
-	expected_meas = numpy.cross(numpy.array([0, 1, 0]), numpy.array([predicted_pose.x, predicted_pose.y, predicted_pose.theta]))
-	#print "-------------------------------------"
-	#print ave_meas_dist
-	#print expected_meas
-	#measurement residual: The difference between our actual measurement and the measurement we expected to get.
-	innovation = ave_meas_dist - expected_meas
-	
-	#measurement noise 
-	Qt = 0.5
-
-	#measurement jacobian
-	H = numpy.array([[9999, 0 , 0],[0, 1, 0],[0 , 0, 9999]])
-
-	# Innovation (or residual) covariance
-	innovation_cov = H*predicted_cov*numpy.transpose(H)+Qt
-
-	#kalman gain
-	kalman_gain = predicted_cov*numpy.transpose(H)*numpy.linalg.inv(innovation_cov)
-
-	# Updated state estimate
-	updated_pose =  numpy.array([predicted_pose.x, predicted_pose.y, predicted_pose.theta]) + numpy.dot(kalman_gain, innovation)
-
-	# Updated covariance estimate
-	predicted_cov= (numpy.identity(3) - numpy.cross(kalman_gain,H))*predicted_cov
-
-	# Package the state estimate in custom message of type 'Config'
-	pose_estimate = pose_msg(updated_pose[0], updated_pose[1], updated_pose[2])
-
-	#publish the estiamted pose
-	pub.publish(pose_estimate)
-
-
-	#store all the estimated x,y values for plot after exiting the program
-	x_updated.append(pose_estimate.x)
-	y_updated.append(pose_estimate.y)
-
+		#store all the estimated x,y values for plot after exiting the program
+		x_updated.append(pose_estimate.x)
+		y_updated.append(pose_estimate.y)
+		elapsed_time = time.time() - start_time
+		#print "elapsed time: ", elapsed_time
+		
 
 
 #a simple measurement model
@@ -254,11 +310,13 @@ def laser_scan_estimate(msg):
 		#print ave_meas_dist
 
 def line_extract_estimate(msg):
-	global line_features, my_list, time_counter
+	global line_features, my_list, time_counter, flag
+	
 
 	#add the features to a list and keep track of the time
 	#so the current features can be in sync with the python code
-	print "***************"
+	#print "***************"
+
 	line_features = msg.line_segments
 
 	my_list.append(line_features)
@@ -266,6 +324,7 @@ def line_extract_estimate(msg):
 	temp1 = line_features[0].radius
 	temp2 = line_features[0].angle
 	currF = my_list[0]
+
 
 	if False:
 		print "radius: ", (currF[0]).start
@@ -315,7 +374,7 @@ def line_extract_estimate(msg):
 		print "y: ", currF[6].radius * math.cos(currF[6].angle)
 
 		print "len of obs: ", len(currF)
-	print "***************"
+	#print "***************"
 
 def get_filtered_pose(msg):
 	global x_filtered, y_filtered
@@ -370,8 +429,8 @@ def main():
 	#this rate will determine how fast the filter can be run.
 
 	#create a timer to call the measurement update function.
-	#this is being called at 40hz or 0.025 ms
-	rospy.Timer(rospy.Duration(0.025), meas_update_step, oneshot=False)
+	#this is being called at 40hz or 0.025 ms,  30hz or 33.3ms = 0.033
+	rospy.Timer(rospy.Duration(0.033), meas_update_step, oneshot=False)
 
 	rospy.Subscriber('/odometry/filtered', Odometry, get_filtered_pose)
 

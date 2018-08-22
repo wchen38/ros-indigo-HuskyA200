@@ -202,6 +202,7 @@ void LineExtractionROS::cacheData(const sensor_msgs::LaserScan::ConstPtr &scan_m
 ///////////////////////////////////////////////////////////////////////////////
 void LineExtractionROS::laserScanCallback(const sensor_msgs::LaserScan::ConstPtr &scan_msg)
 {
+
   if (!data_cached_)
   {
     cacheData(scan_msg); 
