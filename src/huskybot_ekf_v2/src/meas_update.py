@@ -19,6 +19,11 @@ ave_meas_dist = 0
 
 predicted_pose = 0
 predicted_cov = 0
+
+posex_Filtered = 0
+posey_Filtered = 0
+yaw_Filtered = 0
+
 pose_estimate = pose_msg()
 Vt = 0 				#noise in motion model
 
@@ -55,6 +60,12 @@ m = [
 			[6.66, 7.19],
 			
 			[3.38, 7.89],
+
+			[0.327, 2.07],
+			[1.49, 1.99],
+			[2.08, 1.96],
+			[2.98, 1.83],
+			[3.85, 1.82],
 			
 			]
 NUMBER_OF_LANDMARKS = len(m)
@@ -116,7 +127,7 @@ def odom_state_prediction(msg):
 def meas_update_step(msg):
 
 	start_time = time.time()
-	global curr_time_index, m, NUMBER_OF_LANDMARKS
+	global curr_time_index, m, NUMBER_OF_LANDMARKS, posex_Filtered, posey_Filtered, yaw_Filtered
 	global 	x_updated
 	global y_updated
 	global pub
@@ -129,21 +140,12 @@ def meas_update_step(msg):
 		curr_feature = my_list[curr_time_index]
 
 
-		#print "******************"
-		feature_len = len(curr_feature)
 
-		feature1_temp = curr_feature[0].end
-		feature2_temp = curr_feature[feature_len-1].end
-
-		feature1 = [feature1_temp[0], feature1_temp[1]*-1]
-		feature2 = [feature2_temp[0], feature2_temp[1]*-1]
-
-		point_fea = numpy.array([feature1,
-								feature2
-								])
+		my_fea_list = [curr_feature[0], curr_feature[1]]
+		print "my fea list: ", my_fea_list[0].end
 		print "*******************"
 		#print point_fea
-		for i in range(0,len(point_fea)):
+		for i in range(0,len(my_fea_list)):
 			
 			
 			maxJ = 0
@@ -154,74 +156,49 @@ def meas_update_step(msg):
 
 
 			#find the slop of the line feature
-			robot_x = predicted_pose.x
-			robot_y = predicted_pose.y
-			feature_start = curr_feature[i].start
-			feature_end = curr_feature[i].end
+			robot_x = posex_Filtered
+			robot_y = posey_Filtered
+			feature_start = my_fea_list[i].start
+			feature_end = my_fea_list[i].end
 
 			p1 = [feature_start[0], feature_start[1]*-1]
 			p2 = [feature_end[0], feature_end[1]*-1]
 			
 			print "p1: ", p1
 			print "p2: ", p2
-
-			#slope = (y2 - y1)/(x2 - x1)
-			feature_slope = (p2[1] - p1[0]) / (p2[0] - p1[0])
-			#print "feature_slope = ", feature_slope
-			# slope intercept form y = mx+b => b= y - mx
-			feature_intercept = p1[1] - feature_slope*p1[0]
-			#print "feature_intercept = ", feature_intercept
-			#slope of the perpendicular line, negative reciprocal of the original line
-			perp_line_slope = -1/feature_slope
-			#print "perp_line_slope = ", perp_line_slope
-
-			perp_line_intercept = 0 - perp_line_slope*0
-
-			#set the two line equation equal to each other and find x which is where 
-			#both line cross
-			point_feature_x = (perp_line_intercept - feature_intercept) / (feature_slope - perp_line_slope)
-			point_feature_y = (perp_line_slope*point_feature_x) + perp_line_intercept
 			
-			xx1 = point_feature_x - robot_x
-			yy1 = point_feature_y - robot_y
+			distx = math.pow((p2[0] - robot_x), 2);
+			disty = math.pow((p2[1] - robot_y), 2);
+				
+			q = distx + disty
+			angle = math.atan2(p2[1]-robot_y, p2[0]- robot_x)
 
-			feature_range1 = math.sqrt(math.pow(xx1,2)  + math.pow(yy1,2))
-			feature_bearing1 = math.atan2(yy1,xx1)
-			
-			#print "range1: ", feature_range1
-			#print "bearing1: ", feature_bearing1
-			#----------------------------------new code for end point feather range and bearing --------------
-			xx = point_fea[i][0]-robot_x
-			yy = point_fea[i][1]-robot_y
-			feature_range = math.sqrt(math.pow(xx,2)  + math.pow(yy,2))
-			feature_bearing = math.atan2(yy,xx)
-			#print "range: ", feature_range
-			#print "bearing: ",feature_bearing
-			
+			print "calculated dist: ", math.sqrt(q)
+			print "calculated angle: ", angle
 
-	 		line_radius = curr_feature[i].radius
-			line_angle = curr_feature[i].angle
+	 		line_radius = my_fea_list[i].radius
+			line_angle = my_fea_list[i].angle
 			print "radius: ", line_radius
 			print "angle: ", line_angle
 			obs_meas = numpy.array([[line_radius],
 									[line_angle]
 									])
-			#print "******************"
+			print "-------------------------------------"
 			for k in range(0, len(m)):
 
 				
 				
 				mkx = m[k][0]
 				mky = m[k][1]
-				posex = predicted_pose.x
-				posey = predicted_pose.y
+				posex = robot_x
+				posey = robot_y
 				poseth = predicted_pose.theta
 
 				distx = math.pow((mkx - posex), 2);
 				disty = math.pow((mky - posey), 2);
 				
 				q = distx + disty
-				angle = math.atan2(mky-posey, mkx-posex) - poseth
+				angle = math.atan2(mky-posey, mkx-posex) - yaw_Filtered
 
 				#print "--------------------"
 				#print "q: ", q
@@ -377,12 +354,15 @@ def line_extract_estimate(msg):
 	#print "***************"
 
 def get_filtered_pose(msg):
-	global x_filtered, y_filtered
+	global x_filtered, y_filtered, posex_Filtered, posey_filtered, yaw_Filtered
+	posex_Filtered = msg.pose.pose.position.x
+	posey_Filtered = msg.pose.pose.position.y
 	
 	x_filtered.append(msg.pose.pose.position.x)
 	y_filtered.append(msg.pose.pose.position.y)
 	quat = msg.pose.pose.orientation
 	(roll,pitch,yaw) = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])
+	yaw_Filtered = yaw
 	#print "filtered yaw ----> ", yaw
 
 
