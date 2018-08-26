@@ -89,11 +89,16 @@ def line_extract_estimate(msg):
 		disty = (-midy - y_filtered)
 		
 		r = math.sqrt(distx**2 + disty**2)
-		#print constraint
+		#only care about the features that are 3 meters away
 		if(r < 3):
 			
-			#got the relative bearing of the landmarks inrepect to the robot
+			#got the relative bearing of the landmarks in repect to the robot
+			#bearing with respect to world frame -y axis
 			bearing = (math.pi - math.atan2(distx, disty)) # + yaw_filtered
+
+			#bearing with respect to world frame +x aixs
+			#bearing_wrt_x =  math.atan2(disty, distx)
+			
 
 			#print "bearing: ", bearing, "yaw: ", yaw_filtered
 			
@@ -131,6 +136,9 @@ def line_extract_estimate(msg):
 			poseY = m[landmarkIndex][1] + rHat*math.sin(lamdaHat)
 			heading = (math.pi - (2*bearingHat))/2
 			
+			#the angle between landmark and the world frame x-aixs
+			fea_bearing = (heading - bearing)
+			print "c: ", fea_bearing
 
 			dty = OFFSET * math.sin(heading)
 			dtx = OFFSET * math.cos(heading)
@@ -174,6 +182,7 @@ def plot_data():
 		x_end = x_start - dtx
 		y_end = y_start + dty
 		
+		#decides which direction to plot the heading
 		if( (heading_rec[i]>=0) and (heading_rec[i]<=math.pi/2) or ( (heading_rec[i]<-3*math.pi/2) and (heading_rec[i]>=-2*math.pi) )  ):
 			x_end = x_start + dtx
 			y_end = y_start + dty
