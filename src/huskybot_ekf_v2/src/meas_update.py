@@ -22,7 +22,6 @@ predicted_cov = 0
 
 posex_Filtered = 0
 posey_Filtered = 0
-yaw_Filtered = 0
 
 pose_estimate = pose_msg()
 Vt = 0 				#noise in motion model
@@ -127,7 +126,7 @@ def odom_state_prediction(msg):
 def meas_update_step(msg):
 
 	start_time = time.time()
-	global curr_time_index, m, NUMBER_OF_LANDMARKS, posex_Filtered, posey_Filtered, yaw_Filtered
+	global curr_time_index, m, NUMBER_OF_LANDMARKS, posex_Filtered, posey_Filtered
 	global 	x_updated
 	global y_updated
 	global pub
@@ -190,15 +189,15 @@ def meas_update_step(msg):
 				
 				mkx = m[k][0]
 				mky = m[k][1]
-				posex = robot_x
-				posey = robot_y
+				posex = predicted_pose.x
+				posey = predicted_pose.y
 				poseth = predicted_pose.theta
 
 				distx = math.pow((mkx - posex), 2);
 				disty = math.pow((mky - posey), 2);
 				
 				q = distx + disty
-				angle = math.atan2(mky-posey, mkx-posex) - yaw_Filtered
+				angle = math.atan2(mky-posey, mkx-posex) - poseth
 
 				#print "--------------------"
 				#print "q: ", q
@@ -354,7 +353,7 @@ def line_extract_estimate(msg):
 	#print "***************"
 
 def get_filtered_pose(msg):
-	global x_filtered, y_filtered, posex_Filtered, posey_filtered, yaw_Filtered
+	global x_filtered, y_filtered, posex_Filtered, posey_filtered
 	posex_Filtered = msg.pose.pose.position.x
 	posey_Filtered = msg.pose.pose.position.y
 	
@@ -362,7 +361,6 @@ def get_filtered_pose(msg):
 	y_filtered.append(msg.pose.pose.position.y)
 	quat = msg.pose.pose.orientation
 	(roll,pitch,yaw) = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])
-	yaw_Filtered = yaw
 	#print "filtered yaw ----> ", yaw
 
 

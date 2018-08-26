@@ -9,7 +9,7 @@ MAX_NEG_STEERING_ANGLE = -30*math.pi/180
 
 kp = 14.0
 kd = 0.09
-VELOCITY = 0.3
+VELOCITY = 1
 prev_error = 0
 #steering_angle = 18
 

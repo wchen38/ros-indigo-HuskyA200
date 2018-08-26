@@ -42,7 +42,7 @@ heading_rec = []
 
 #create a publisher
 #pub0 = rospy.Publisher('publish_odom_pose',pose_msg, queue_size =10)
-pub1 = rospy.Publisher('publish_measurment_pose',pose_msg, queue_size =10)
+pub1 = rospy.Publisher('publish_measurment_pose_old',pose_msg, queue_size =10)
 
 def odomCallback(msg):
 	global x_odom_rec, y_odom_rec
@@ -77,26 +77,20 @@ def line_extract_estimate(msg):
 	feature_len = len(line_features)
 
 	for k in range(0, feature_len-1):
-		
-		# find the midpoint of the line feature
-		midx = (line_features[k].start[0] + line_features[k].end[0])/2
-		midy = (line_features[k].start[1] + line_features[k].end[1])/2
-
-		distx = (midx - x_filtered)
-		#added the negative(-midy) because line_feature is in odom frame and
-		#we need to transform it into base frame. If, I don't do this, then
-		#the start, end point won't be aligned with the midpoint
-		disty = (-midy - y_filtered)
+		distx = (line_features[k].start[0] - x_filtered)
+		disty = (line_features[k].start[1] - y_filtered)
 		
 		r = math.sqrt(distx**2 + disty**2)
 		#print constraint
 		if(r < 3):
 			
-			#got the relative bearing of the landmarks inrepect to the robot
-			bearing = (math.pi - math.atan2(distx, disty)) # + yaw_filtered
+			bearing = math.atan2(disty, distx) + yaw_filtered
 
-			#print "bearing: ", bearing, "yaw: ", yaw_filtered
 			
+			# find the midpoint of the line feature
+			midx = (line_features[k].start[0] + line_features[k].end[0])/2
+			midy = ((-1)*line_features[k].start[1] + (-1)*line_features[k].end[1])/2
+
 			landmarkIndex = 0
 			minDist = 999
 
@@ -129,8 +123,7 @@ def line_extract_estimate(msg):
 
 			poseX = m[landmarkIndex][0] + rHat*math.cos(lamdaHat)
 			poseY = m[landmarkIndex][1] + rHat*math.sin(lamdaHat)
-			heading = (math.pi - (2*bearingHat))/2
-			
+			heading = lamdaHat - math.pi - bearingHat
 
 			dty = OFFSET * math.sin(heading)
 			dtx = OFFSET * math.cos(heading)
@@ -168,40 +161,24 @@ def plot_data():
 	for i in range(0, len(x_est_rec)-1):
 		
 		dtx = 0.1 * math.cos(heading_rec[i])
-		dty = 0.1 * math.sin(heading_rec[i])
+		dty = 0.1 * math.sin(-heading_rec[i])
 		x_start = x_est_rec[i]
 		y_start = y_est_rec[i]
 		x_end = x_start - dtx
-		y_end = y_start + dty
-		
-		if( (heading_rec[i]>=0) and (heading_rec[i]<=math.pi/2) or ( (heading_rec[i]<-3*math.pi/2) and (heading_rec[i]>=-2*math.pi) )  ):
-			x_end = x_start + dtx
-			y_end = y_start + dty
-		elif( (heading_rec[i]>math.pi/2) and (heading_rec[i]<=math.pi)  or ( (heading_rec[i]<-math.pi) and (heading_rec[i]>=-3*math.pi/2) ) ):
-			x_end = x_start - dtx
-			y_end = y_start + dty
-		elif( (heading_rec[i]<0) and (heading_rec[i]>=-math.pi/2) or ( (heading_rec[i]>3*math.pi/2) and (heading_rec[i]<=2*math.pi) ) ):
-			x_end = x_start + dtx
-			y_end = y_start - dty
-		elif(( (heading_rec[i]<-math.pi/2) and (heading_rec[i]>=-math.pi) ) or ( (heading_rec[i]>math.pi) and (heading_rec[i]<=3*math.pi/2) ) ):
-			x_end = x_start - dtx
-			y_end = y_start - dty
-		else:
-			print heading_rec[i]
-		
+		y_end = y_start -dty
 
 		plt.plot([x_start, x_end],[y_start, y_end], 'g-')
 		
 	plt.ylabel("y")
 	plt.xlabel("x")
 
-	plt.savefig('/home/husky/catkin_ws/plots/sample_landmark_model.pdf')
+	plt.savefig('./plots/sample_landmark_model.pdf')
 
 
 def main():
 	#initialize node
 	#rospy.init_node("publish_odom_pose", anonymous=True)
-	rospy.init_node("publish_measurment_pose", anonymous=True)
+	rospy.init_node("publish_measurment_pose_old", anonymous=True)
 
 	#sub to odometry node (/odom)
 	rospy.Subscriber("/husky_velocity_controller/odom", Odometry, odomCallback)

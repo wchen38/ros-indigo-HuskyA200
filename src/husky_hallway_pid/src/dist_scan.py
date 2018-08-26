@@ -8,14 +8,15 @@ from husky_hallway_pid.msg import pid_input
 
 pub = rospy.Publisher('pid_error', pid_input, queue_size=10)
 dist = 0
-AC = 5
+AC = 1.5
+DESIRE_DIST = 1#abs(range_180_deg - b)	# center of the hallway
 def odomCallback(msg):
 	global dist
 	dist = dist + msg.linear.x;
 	
 
 def callback(msg):
-	global AC
+	global AC, DESIRE_DIST
 	#code for finding the distance between wall and robot 
 	#at zero degrees and 180 degrees
 	theta = math.pi/4						#45 degrees in radians 
@@ -23,13 +24,13 @@ def callback(msg):
 	#print b
 	a = msg.ranges[179]						# 45 degrees
 	range_180_deg = msg.ranges[719] 		# 180 degrees
-	desire_dist = 0.6#abs(range_180_deg - b)	# center of the hallway
+	
 	
 	#calculating the error after driving for about 1 meter
 	alpha = math.atan((a*math.cos(theta)-b)/(a*math.sin(theta)))
 	AB = b*math.cos(alpha)
 	CD = AB + AC*math.sin(alpha)
-	error = CD - desire_dist  
+	error = CD - DESIRE_DIST  
 	pid_msg = pid_input()
 	pid_msg.pid_error = error
 	pub.publish(pid_msg)		
