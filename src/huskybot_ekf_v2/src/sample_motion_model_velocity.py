@@ -20,8 +20,8 @@ a1 = 0.01
 a2 = 0.01 
 a3 = 0.01
 a4 = 0.01
-a5 = 0.01
-a6 = 0.01
+a5 = 0.1
+a6 = 0.1
 DT = 0.03
 
 #inital guess
@@ -47,8 +47,8 @@ heading_rec = []
 pub = rospy.Publisher('publish_motion_model_velocity',pose_msg, queue_size =10)
 
 def odomCallback(msg):
-	global x_odom_rec, y_odom_rec, x_est_rec, y_est_rec
-	global a1, a2, a3, a3, a4, a5, a6, DT
+	global x_odom_rec, y_odom_rec, x_est_rec, y_est_rec, estX, estY
+	global a1, a2, a3, a3, a4, a5, a6, DT, theta
 	global pub
 	
 	x = msg.pose.pose.position.x
@@ -66,17 +66,21 @@ def odomCallback(msg):
 	wHat = w + numpy.random.normal(0, a3*(v**2) + a4*(w**2)) 
 	lamdaHat = numpy.random.normal(0, a5*(v**2) + a6*(w**2)) 
 
-	temp = yaw + wHat*DT
-	estX = x - (vHat/wHat)*math.sin(yaw) + (vHat/wHat)*math.sin(temp)
-	estY = y - (vHat/wHat)*math.cos(yaw) + (vHat/wHat)*math.cos(temp)
-	estHeading = yaw + wHat*DT + lamdaHat*DT
+
+	temp = theta + wHat*DT
+	estX = estX - (vHat/wHat)*math.sin(theta) + (vHat/wHat)*math.sin(temp)
+	estY = estY - (vHat/wHat)*math.cos(theta) + (vHat/wHat)*math.cos(temp)
+	theta = theta + wHat*DT + lamdaHat*DT
+	#wrap angle between -pi and pi
+	#theta = (theta + numpy.pi) % (2*numpy.pi) - numpy.pi
+	print theta 
 
 	x_odom_rec.append(x)
 	y_odom_rec.append(y)
 	x_est_rec.append(estX)
 	y_est_rec.append(estY)
 
-	estPose = pose_msg(estX,estY, estHeading)
+	estPose = pose_msg(estX,estY, theta)
 	pub.publish(estPose)
 
 

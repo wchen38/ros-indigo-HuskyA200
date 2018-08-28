@@ -32,9 +32,9 @@ Q = numpy.array([
 #initial guess
 theta = 0.5
 mu = numpy.array([
-				[0.4],
-				[0.3],
-				[0.3]
+				[0],
+				[0],
+				[0]
 				])
 
 P = numpy.array([
@@ -73,19 +73,18 @@ m = [
 pub = rospy.Publisher('publish_ekf_localization_known_correspondences',pose_msg, queue_size =10)
 
 def odomCallback(msg):
-	global x_odom_rec, y_odom_rec, x_est_rec, y_est_rec
+	global x_odom_rec, y_odom_rec
 	global a1, a2, a3, a3, a4, a5, a6, DT, v, w
 	global pub
-	
+	global mu, P
+
 	x = msg.pose.pose.position.x
 	y = msg.pose.pose.position.y
 	quat = msg.pose.pose.orientation
 	(roll,pitch,yaw) = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])
 
 
-	#linear and angular velocity from odometry
-	v = msg.twist.twist.linear.x 
-	w = msg.twist.twist.angular.z
+
 
 	x_odom_rec.append(x)
 	y_odom_rec.append(y)
@@ -94,35 +93,31 @@ def odomCallback(msg):
 
 
 def odomFiteredCallback(msg):
-	global x_filtered, y_filtered, x_filtered_rec, y_filtered_rec
-	global yaw_filtered
+	global x_filtered, y_filtered, x_filtered_rec, y_filtered_rec, yaw_filtered
+	global mu, P
 
 	x_filtered = msg.pose.pose.position.x
 	y_filtered = msg.pose.pose.position.y
 	quat = msg.pose.pose.orientation
 	(roll,pitch,yaw_filtered) = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])
 
-	x_filtered_rec.append(x_filtered)
-	y_filtered_rec.append(y_filtered)
 
-
-
-def line_extract_estimate(msg):
-
-	line_features = msg.line_segments
-	feature_len = len(line_features)
-
+	#linear and angular velocity from odometry
+	v = msg.twist.twist.linear.x 
+	w = msg.twist.twist.angular.z
 
 	#continue with table 7.2
+	theta = mu[2][0]
 	vOverW = v/w
 	th_w_Dt = theta + (w*DT)
 	Gt = numpy.array([
 					[1, 0, -vOverW*math.cos(theta) + vOverW*math.cos(th_w_Dt)],
 					[0, 1, -vOverW*math.sin(theta) + vOverW*math.sin(th_w_Dt)],
-					 0, 0, 1])
+					[0, 0, 1]
+					 ])
 
-	eq1 = ((v(math.sin(theta)-math.sin(th_w_Dt)))/ (w**2) ) + ( (v*math.cos(th_w_Dt)*DT)/w )
-	eq2 = ((v(math.cos(theta)-math.cos(th_w_Dt)))/ (w**2) ) + ( (v*math.sin(th_w_Dt)*DT)/w )
+	eq1 = ((v*(math.sin(theta)-math.sin(th_w_Dt)))/ (w**2) ) + ( (v*math.cos(th_w_Dt)*DT)/w )
+	eq2 = ((v*(math.cos(theta)-math.cos(th_w_Dt)))/ (w**2) ) + ( (v*math.sin(th_w_Dt)*DT)/w )
 	Vt = numpy.array([
 					[ (-math.sin(theta)+math.sin(th_w_Dt))/w, eq1],
 					[ (math.cos(theta)-math.cos(th_w_Dt))/w, eq2],
@@ -133,20 +128,35 @@ def line_extract_estimate(msg):
 					[a1*(v**2)+a2*(w**2), 	0],
 					[0, 					a3*(v**2) + a4*(w**2)]
 					])
-
+	
+	wrapedAngle = ((w*DT) + numpy.pi) % (2*numpy.pi) - numpy.pi
 	poseModel = numpy.array([
 							[-vOverW*math.sin(theta) + vOverW*math.sin(th_w_Dt)],
 							[vOverW*math.cos(theta) - vOverW*math.cos(th_w_Dt)],
-							[w*DT]
+							[wrapedAngle]
 							])
 	muBar = mu + poseModel
 
-	Pm = numpy.dot( numpy.dot(Gt*P), numpy.transpose(Gt) ) + numpy.dot( numpy.dot(Vt*Mt), numpy.transpose(Vt) )
+	Pm = numpy.dot( numpy.dot(Gt,P), numpy.transpose(Gt) ) + numpy.dot( numpy.dot(Vt,Mt), numpy.transpose(Vt) )
+
+	mu = muBar
+	P = Pm
+	x_est_rec.append(muBar[0][0])
+	y_est_rec.append(muBar[1][0])
+
+
+
+	x_filtered_rec.append(x_filtered)
+	y_filtered_rec.append(y_filtered)
 	
 
 
 
-	
+def line_extract_estimate(msg):
+	global x_est_rec, y_est_rec
+
+	line_features = msg.line_segments
+	feature_len = len(line_features)
 
 	#since we don't have know which landmarks the robot is seeing, therefore
 	#we have to calculate those correspondence, another words, we need to know
@@ -196,6 +206,7 @@ def line_extract_estimate(msg):
 					landmarkIndex = i
 
 
+			#continue on ch7 table 7.2 step 9
 
 
 
@@ -226,7 +237,7 @@ def plot_data():
 	plt.ylabel("y")
 	plt.xlabel("x")
 
-	plt.savefig('/home/husky/catkin_ws/plots/sample_motion_model_velocity.pdf')
+	plt.savefig('/home/husky/catkin_ws/plots/ekf_localization_known_correspondences.pdf')
 
 def main():
 	#initialize node
