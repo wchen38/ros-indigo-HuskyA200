@@ -68,12 +68,14 @@ def odomCallback(msg):
 
 
 	temp = theta + wHat*DT
-	estX = estX - (vHat/wHat)*math.sin(theta) + (vHat/wHat)*math.sin(temp)
-	estY = estY - (vHat/wHat)*math.cos(theta) + (vHat/wHat)*math.cos(temp)
+	#estX = estX - (vHat/wHat)*math.sin(theta) + (vHat/wHat)*math.sin(temp)
+	#estY = estY - (vHat/wHat)*math.cos(theta) + (vHat/wHat)*math.cos(temp)
+	estX = estX + vHat*math.cos(theta)*DT
+	estY = estY + vHat*math.sin(theta)*DT
 	theta = theta + wHat*DT + lamdaHat*DT
 	#wrap angle between -pi and pi
-	#theta = (theta + numpy.pi) % (2*numpy.pi) - numpy.pi
-	print theta 
+	theta = (theta + numpy.pi) % (2*numpy.pi) - numpy.pi
+	#print theta 
 
 	x_odom_rec.append(x)
 	y_odom_rec.append(y)

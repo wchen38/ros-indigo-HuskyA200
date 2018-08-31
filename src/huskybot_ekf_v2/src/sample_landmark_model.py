@@ -90,12 +90,13 @@ def line_extract_estimate(msg):
 		midx = (line_features[k].start[0] + line_features[k].end[0])/2
 		midy = (line_features[k].start[1] + line_features[k].end[1])/2
 		distx = (midx - x_filtered)
+		
 		#added the negative(-midy) because line_feature is in odom frame and
 		#we need to transform it into base frame. If, I don't do this, then
 		#the start, end point won't be aligned with the midpoint
 		disty = (-midy - y_filtered)
-		
 		r = math.sqrt(distx**2 + disty**2)
+
 		#only care about the features that are 3 meters away
 		if(r < 3):
 			
@@ -105,8 +106,6 @@ def line_extract_estimate(msg):
 
 			#bearing with respect to world frame +x aixs
 			bearing_wrt_x =  math.atan2(disty, distx)
-			
-
 			
 			landmarkIndex = 0
 			minDist = 999
@@ -126,8 +125,6 @@ def line_extract_estimate(msg):
 
 				#keep that index as j in table 6.5, since that will represent which landmark the 
 				#laser detected
-
-
 				if(euclidean_dist < minDist):
 					minDist = euclidean_dist
 					landmarkIndex = i

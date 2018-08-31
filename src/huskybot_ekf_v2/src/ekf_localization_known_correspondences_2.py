@@ -62,7 +62,7 @@ y_est_rec = []
 heading_rec = []
 v = 0
 w = 0
-
+ut=[v,w]
 
 m = [
 			[1.03, -2.52],
@@ -96,22 +96,13 @@ def odomCallback(msg):
 
 
 
+def prediction(mu, P, ut):
 
-def odomFiteredCallback(msg):
-	global x_filtered, y_filtered, x_filtered_rec, y_filtered_rec, yaw_filtered
-	global mu, P, muBar, Pm
-
-	x_filtered = msg.pose.pose.position.x
-	y_filtered = msg.pose.pose.position.y
-	quat = msg.pose.pose.orientation
-	(roll,pitch,yaw_filtered) = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])
-
-
-	#linear and angular velocity from odometry
-	v = msg.twist.twist.linear.x 
-	w = msg.twist.twist.angular.z
-
+	#global mu, P
 	#continue with table 7.2
+	v = ut[0]
+	w = ut[1]
+	#print v, w
 	theta = mu[2][0]
 	vOverW = v/w
 	th_w_Dt = theta + (w*DT)
@@ -144,12 +135,30 @@ def odomFiteredCallback(msg):
 
 	Pm = numpy.dot( numpy.dot(Gt,P), numpy.transpose(Gt) ) + numpy.dot( numpy.dot(Vt,Mt), numpy.transpose(Vt) )
 
-	mu = muBar
-	P = Pm
+	#mu = muBar
+	#P = Pm
+	#print "prediction: ", muBar
 	x_est_rec.append(muBar[0][0])
 	y_est_rec.append(muBar[1][0])
 
+	return muBar, Pm
 
+
+def odomFiteredCallback(msg):
+	global x_filtered, y_filtered, x_filtered_rec, y_filtered_rec, yaw_filtered
+	global mu, P, ut
+
+	x_filtered = msg.pose.pose.position.x
+	y_filtered = msg.pose.pose.position.y
+	quat = msg.pose.pose.orientation
+	(roll,pitch,yaw_filtered) = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])
+	#linear and angular velocity from odometry
+	#v = msg.twist.twist.linear.x 
+	#w = msg.twist.twist.angular.z
+
+	ut = [msg.twist.twist.linear.x, msg.twist.twist.angular.z]
+
+	#(mu, P) = prediction(mu, P, ut)
 
 	x_filtered_rec.append(x_filtered)
 	y_filtered_rec.append(y_filtered)
@@ -158,17 +167,19 @@ def odomFiteredCallback(msg):
 
 
 def line_extract_estimate(msg):
-	global x_est_rec, y_est_rec, x_filtered, y_filtered
-	global muBar, Pm 
+	global x_est_rec, y_est_rec, x_filtered, y_filtered, yaw_filtered
+	global mu, P, ut
 	global NUMBER_OF_LANDMARKS
 
 	#zHatRec = numpy.zeros((2,1, NUMBER_OF_LANDMARKS))
 	#Hrec = numpy.zeros((2,3, NUMBER_OF_LANDMARKS))
 	#Srec = numpy.zeros((2,3, NUMBER_OF_LANDMARKS))
 
-
+	(muBar, Pm) = prediction(mu, P, ut)
+	#print "update: ", muBar
 	line_features = msg.line_segments
 	feature_len = len(line_features)
+
 
 	#since we don't have know which landmarks the robot is seeing, therefore
 	#we have to calculate those correspondence, another words, we need to know
@@ -196,7 +207,7 @@ def line_extract_estimate(msg):
 
 			z = numpy.array([
 							[r],
-							[bearing_wrt_x]
+							[yaw_filtered - bearing_wrt_x]
 							
 							])
 
@@ -224,27 +235,32 @@ def line_extract_estimate(msg):
 
 
 			#continue on ch7 table 7.2 step 9
-			distx2 = m[landmarkIndex][0] - muBar[1][0]
-			disty2 = m[landmarkIndex][1] - muBar[2][0]
-			q = (distx2**2) + (disty2**2)
+			
 
+
+			distx2 = m[landmarkIndex][0] - muBar[0]
+			disty2 = m[landmarkIndex][1] - muBar[1]
+			q = (distx2**2) + (disty2**2)
+			print "--------------------------------"
+			print m[landmarkIndex][0], "-", muBar[0], "=", distx2
+			print m[landmarkIndex][1], "-", muBar[1], "=", disty2
 			zHat = numpy.array([
 							[math.sqrt(q)],
-							[math.atan2(disty2,distx2) - muBar[2][0]]
-							
+							[math.atan2(disty2,distx2) - muBar[2]]
 							])
-
+			#print (math.atan2(disty2,distx2) - muBar[2]), ",", yaw_filtered - bearing_wrt_x
+			#print (math.sqrt(q)), ",", r
 			H = numpy.array([
 								[-distx2/math.sqrt(q), -disty2/math.sqrt(q), 0],
 								[disty2/q,				-distx2/q,         -1]
 								
-									])
+							])
 			
 
 
 			tt1 = MatMul(H, Pm)
 			S = MatMul(tt1, numpy.transpose(H))
-			print S
+
 			K =MatMul( MatMul(Pm, numpy.transpose(H)),  numpy.linalg.inv(S))
 						
 			innovation = z-zHat
@@ -253,11 +269,15 @@ def line_extract_estimate(msg):
 
 			mu = muBar
 			P = Pm
-
+			#print "-----------------"
+			#print P
 
 
 			estPose = pose_msg(mu[0][0],mu[1][0], mu[2][0])
 			pub.publish(estPose)
+
+
+
 
 def MatMul(mat1, mat2):
 	
@@ -304,8 +324,8 @@ def plot_data():
 
 	# Update is plotted as blue points. 
 	plt.plot(x_est_rec,y_est_rec,'b')
-	plt.plot(x_odom_rec, y_odom_rec, 'r*')
-	plt.plot(x_filtered_rec, y_filtered_rec, 'g*')
+	#plt.plot(x_odom_rec, y_odom_rec, 'r')
+	#plt.plot(x_filtered_rec, y_filtered_rec, 'g')
 	
 	
 	plt.ylabel("y")
