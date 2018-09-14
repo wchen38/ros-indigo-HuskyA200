@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+
+<launch>
+
+     <node pkg="huskybot_ekf_2" name="publish_odom_filtered_pose" type="publish_odom_filtered_pose.py" output="screen"/>
+
+     <node pkg="huskybot_ekf_2" name="publish_odom_pose" type="publish_odom_pose.py" output="screen"/>
+
+     <node pkg="$(find gps_common)" name="utm_odometry_node" type="utm_odometry_node" output="screen"/> 
+
+     
+</launch>

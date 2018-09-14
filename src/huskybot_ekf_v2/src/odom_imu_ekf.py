@@ -133,10 +133,10 @@ def odomCallback(msg):
 	#The Kalman gain is used to to indicate how much we trust the innovation
 	Kt = MatMul(MatMul(Pm, numpy.transpose(Ht)),numpy.linalg.inv(innovation_cov));
 
-	print "^^^^^^^^^^^^^^^^^^^^^^^"
-	print (MatMul(Pm, numpy.transpose(Ht))).shape
-	print "---------"
-	print (numpy.linalg.inv(innovation_cov)).shape
+	#print "^^^^^^^^^^^^^^^^^^^^^^^"
+	#print (MatMul(Pm, numpy.transpose(Ht))).shape
+	#print "---------"
+	#print (numpy.linalg.inv(innovation_cov)).shape
 	#measurement model
 	z = numpy.array([
 					[v],

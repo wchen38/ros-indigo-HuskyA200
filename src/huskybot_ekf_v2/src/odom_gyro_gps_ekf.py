@@ -11,35 +11,41 @@ from laser_line_extraction.msg import LineSegmentList
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
-from std_msgs.msg import Float32
 from huskybot_ekf.msg import *
 from tf.transformations import euler_from_quaternion
 
 w = 0
 a = 0
-dt = 0.1
+dt = 0.0201
 x_est_rec = []
 y_est_rec = []
 x_odom_rec = []
 y_odom_rec = []
 x_filtered_rec = []
 y_filtered_rec = []
+gps_x = 0
+gps_y = 0
+gps_x_rec = []
+gps_y_rec = []
+orign_x = 0
+orign_y = 0 
+gps_flag = 0
+true_x = 0
+true_y = 0
+true_x_rec = []
+true_y_rec = []
 
 #parameters
-#alpha1 = 0.5
-#alpha2 = 0.4
-#alpha3 = 0.1
-#alpha4 = 0.1
-
-alpha1 = 1.5
+alpha1 = 0.5
 alpha2 = 0.4
 alpha3 = 0.1
-alpha4 = 0.4
+alpha4 = 0.1
 
 #covariance Q, measurement noise (eq. 7.15)
 #temp1 = [0.9**2, 0.9**2, 0.5**2, 0.01**2];
-temp1 = [0.9**2, 0.9**2, 0.5**2, 0.01**2];
-Qt = 0.5**2
+temp1 = [0.9**2, 0.9**2];
+Qt = Qt = numpy.diag(temp1);
+#Qt = 1**2
 
 #initial guess of the pose
 X = numpy.array([
@@ -58,6 +64,7 @@ Pm = P;
 # map the a priori state x_{k | k-1} into the observed space which is 
 #the measurement
 Ht = numpy.array([
+				[0, 0, 0, 1],
 				[0, 0, 0, 1]
      			]);
 
@@ -75,7 +82,10 @@ def odomCallback(msg):
 	global pub, w, a
 	global Qt, Vt, Ht, X, P, Pm, Xm
 	global x_est_rec, y_est_rec, x_odom_rec, y_odom_rec
+	global gps_x, gps_y, true_x, true_y
 
+	prev_t = msg.header.stamp.secs + (msg.header.stamp.nsecs/1000000000.0)
+	#print prev_t
 
 	x = msg.pose.pose.position.x
 	y = msg.pose.pose.position.y
@@ -85,7 +95,16 @@ def odomCallback(msg):
 	v = msg.twist.twist.linear.x
 	odom_w = msg.twist.twist.angular.z
 	
+	#print gps_x, gps_y
+	gps_x_rec.append(gps_x)
+	gps_y_rec.append(gps_y)
+
+	true_x_rec.append(true_x)
+	true_y_rec.append(true_y)
+
 	theta = X[2] 
+
+
 	#-------------------------------prediction---------------------------
     #The Jacobian from the motion model (eq. 7.8)
 	Gt = numpy.array([
@@ -106,7 +125,7 @@ def odomCallback(msg):
 	#motion model, unicycle model, to predict the pose
 	Xm = X + numpy.array([
 						[v*math.cos(theta)*dt],
-						[v*math.sin(-theta)*dt],
+						[v*math.sin(theta)*dt],
 						[w*dt],
 						[0]
 						]);
@@ -130,19 +149,23 @@ def odomCallback(msg):
 
 	#measurement model
 	z = numpy.array([
+					[odom_w],
 					[w]
 					])
       
 	#expected measurements from our prediction
-	z_exp = numpy.array([
+
+	z_exp_temp = numpy.array([
+						[Xm[3]],
 						[Xm[3]]
 						])
-	
+	z_exp = numpy.squeeze(z_exp_temp, axis=(2,))
 	#innovation, difference between what we observe and what we expect
 	innovation_temp = z - z_exp;
-	innovation = numpy.reshape(innovation_temp, (1,1))
-	#print innovation.shape
-	#print Kt
+	#print z_exp.shape
+	innovation = numpy.reshape(innovation_temp, (2,1))
+	
+	#print Kt.shape, innovation.shape
 	#update the pose
 	X = Xm + MatMul(Kt, innovation);
 	X[3] = ( X[3] + numpy.pi) % (2 * numpy.pi ) - numpy.pi
@@ -157,16 +180,12 @@ def odomCallback(msg):
 	x_odom_rec.append(x)
 	y_odom_rec.append(y)
 
-	#print X[0]
-	#print X[1]
 
 
-
-def gyroCallback(msg):
+def imuCallback(msg):
 	global w, a 
-	w = msg.data
-	#a = msg.linear_acceleration.x
-	#print w
+	w = msg.angular_velocity.z
+	a = msg.linear_acceleration.x
 
 def odomFilteredCallback(msg):
 	global x_filtered_rec, y_filtered_rec
@@ -177,6 +196,21 @@ def odomFilteredCallback(msg):
 	(roll,pitch,yaw) = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])
 	x_filtered_rec.append(x)
 	y_filtered_rec.append(y)
+
+def gpsOdomCallback(msg):
+	global gps_x, gps_y, gps_flag, orign_x, orign_y
+	if (gps_flag != 0):
+		gps_y = -(msg.pose.pose.position.x - orign_x)
+		gps_x = msg.pose.pose.position.y - orign_y
+	else:
+		orign_x = msg.pose.pose.position.x
+		orign_y = msg.pose.pose.position.y
+		gps_flag = 1
+
+def groundTruthCallback(msg):
+	global true_x, true_y
+	true_x = msg.pose.pose.position.x
+	true_y = msg.pose.pose.position.y
 
 def plot_data():
 	# Plotting the predicted and updated state estimates as well as the uncertainty ellipse to see if 
@@ -196,13 +230,15 @@ def plot_data():
 	# Update is plotted as blue points. 
 	plt.plot(x_est_rec,y_est_rec,'b')
 	plt.plot(x_odom_rec, y_odom_rec, 'r')
-	plt.plot(x_filtered_rec, y_filtered_rec, 'g')
+	#plt.plot(x_filtered_rec, y_filtered_rec, 'g')
+	plt.plot(gps_x_rec, gps_y_rec, '^')
+	plt.plot(true_x_rec, true_y_rec, 'g')
 	
 	
 	plt.ylabel("y")
 	plt.xlabel("x")
 
-	plt.savefig('/home/husky/catkin_ws/plots/ekf_odom_kvhgyro.pdf')
+	plt.savefig('/home/husky/catkin_ws/plots/ekf_odom_gyro_gps.pdf')
 
 
 def MatMul(mat1, mat2):
@@ -225,16 +261,22 @@ def MatMul(mat1, mat2):
 
 def main():
 	#initialize node
-	rospy.init_node("publish_odom_kvh_ekf_pose", anonymous=True)
+	rospy.init_node("publish_odom_imu_ekf_pose", anonymous=True)
 
 	#sub to raw odometry node (/odom)
 	rospy.Subscriber("/husky_velocity_controller/odom", Odometry, odomCallback)
 
 	#sub to simulated imu data
-	rospy.Subscriber("/dsp3000_rate", Float32, gyroCallback)
+	rospy.Subscriber("/imu/data", Imu, imuCallback)
 
 	#sub to filtered odometry node (/odom)
 	rospy.Subscriber("/odometry/filtered", Odometry, odomFilteredCallback)
+
+	#sub to positoin from gps_common package (/odom)
+	rospy.Subscriber("/odom", Odometry, gpsOdomCallback)
+
+	#sub to ground truth of the robot (/ground_truth/state)
+	rospy.Subscriber("/ground_truth/state", Odometry, groundTruthCallback)
 
 
 

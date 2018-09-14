@@ -22,7 +22,8 @@ a3 = 0.01
 a4 = 0.01
 a5 = 0.1
 a6 = 0.1
-DT = 0.03
+#DT = 0.03 #simulation
+DT = 0.11 #real husky 
 
 #inital guess
 estX = 0

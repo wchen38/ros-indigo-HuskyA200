@@ -11,13 +11,12 @@ from laser_line_extraction.msg import LineSegmentList
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
-from std_msgs.msg import Float32
 from huskybot_ekf.msg import *
 from tf.transformations import euler_from_quaternion
 
 w = 0
 a = 0
-dt = 0.1
+dt = 0.11
 x_est_rec = []
 y_est_rec = []
 x_odom_rec = []
@@ -26,23 +25,20 @@ x_filtered_rec = []
 y_filtered_rec = []
 
 #parameters
-#alpha1 = 0.5
-#alpha2 = 0.4
-#alpha3 = 0.1
-#alpha4 = 0.1
-
-alpha1 = 1.5
+alpha1 = 0.5
 alpha2 = 0.4
 alpha3 = 0.1
-alpha4 = 0.4
+alpha4 = 0.1
 
 #covariance Q, measurement noise (eq. 7.15)
 #temp1 = [0.9**2, 0.9**2, 0.5**2, 0.01**2];
 temp1 = [0.9**2, 0.9**2, 0.5**2, 0.01**2];
-Qt = 0.5**2
+Qt = numpy.diag(temp1); 
 
 #initial guess of the pose
 X = numpy.array([
+				[0],
+				[0],
 				[0],
 				[0],
 				[0],
@@ -50,7 +46,7 @@ X = numpy.array([
 				])
 Xm = X
 #initial guess of the covariance of the state vector
-cov = [0.01**2, 0.01**2, 0.01**2, 0.01**2];
+cov = [0.01**2, 0.01**2, 0.01**2, 0.01**2, 0.01**2, 0.01**2];
 P = numpy.diag(cov);
 Pm = P;
 
@@ -58,14 +54,19 @@ Pm = P;
 # map the a priori state x_{k | k-1} into the observed space which is 
 #the measurement
 Ht = numpy.array([
-				[0, 0, 0, 1]
+				[0, 0, 0, 1, 0, 0],
+     			[0, 0, 0, 0, 1, 0],
+     			[0, 0, 0, 0, 1, 0],
+     			[0, 0, 0, 0, 0, 1]
      			]);
 
 #the motion noise to be mapped into state space (eq. 7.11)
 Vt = numpy.array([
-				[1, 0],
+				[0, 0],
+      			[0, 0],
       			[1, 0],
       			[0, 1],
+      			[1, 0],
       			[0, 1]
       			]);
 
@@ -89,10 +90,12 @@ def odomCallback(msg):
 	#-------------------------------prediction---------------------------
     #The Jacobian from the motion model (eq. 7.8)
 	Gt = numpy.array([
-    				[1, 0, -v*dt*math.sin(theta),   0],
-          			[0, 1, dt*math.cos(theta),      0],
-          			[0, 0, 1,                 		dt],
-          			[0, 0, 0,                		1]
+    				[1, 0, -v*dt*math.sin(theta),   dt*math.cos(theta), 0, 0],
+          			[0, 1, dt*math.cos(theta),    	dt*math.sin(theta), 0, 0],
+          			[0, 0, 1,                		0,            		dt, 0],
+          			[0, 0, 0,                		1,            		0, dt],
+          			[0, 0, 0,               		0,             		1, 0],
+          			[0, 0, 0,                		0,             		0, 1]
           			]);
 
     #To derive the covariance of the additional motion noise nor(0, R)
@@ -108,6 +111,8 @@ def odomCallback(msg):
 						[v*math.cos(theta)*dt],
 						[v*math.sin(-theta)*dt],
 						[w*dt],
+						[0],
+						[0],
 						[0]
 						]);
 
@@ -128,27 +133,35 @@ def odomCallback(msg):
 	#The Kalman gain is used to to indicate how much we trust the innovation
 	Kt = MatMul(MatMul(Pm, numpy.transpose(Ht)),numpy.linalg.inv(innovation_cov));
 
+	#print "^^^^^^^^^^^^^^^^^^^^^^^"
+	#print (MatMul(Pm, numpy.transpose(Ht))).shape
+	#print "---------"
+	#print (numpy.linalg.inv(innovation_cov)).shape
 	#measurement model
 	z = numpy.array([
-					[w]
+					[v],
+					[odom_w],
+					[w],
+					[a]
 					])
       
 	#expected measurements from our prediction
 	z_exp = numpy.array([
-						[Xm[3]]
+						[Xm[3]],
+						[Xm[4]],
+						[Xm[4]],
+						[Xm[5]]
 						])
 	
 	#innovation, difference between what we observe and what we expect
-	innovation_temp = z - z_exp;
-	innovation = numpy.reshape(innovation_temp, (1,1))
-	#print innovation.shape
-	#print Kt
+	innovation = z - z_exp;
+	
 	#update the pose
-	X = Xm + MatMul(Kt, innovation);
+	X = Xm + MatMul(Kt, numpy.squeeze(innovation));
 	X[3] = ( X[3] + numpy.pi) % (2 * numpy.pi ) - numpy.pi
       
 	#update the covarence
-	P =MatMul((numpy.identity(4) - MatMul(Kt,Ht)), Pm);
+	P =MatMul((numpy.identity(6) - MatMul(Kt,Ht)), Pm);
 
 	P = Pm
 	X = Xm 
@@ -157,16 +170,12 @@ def odomCallback(msg):
 	x_odom_rec.append(x)
 	y_odom_rec.append(y)
 
-	#print X[0]
-	#print X[1]
 
 
-
-def gyroCallback(msg):
+def imuCallback(msg):
 	global w, a 
-	w = msg.data
-	#a = msg.linear_acceleration.x
-	#print w
+	w = msg.angular_velocity.z
+	a = msg.linear_acceleration.x
 
 def odomFilteredCallback(msg):
 	global x_filtered_rec, y_filtered_rec
@@ -202,7 +211,7 @@ def plot_data():
 	plt.ylabel("y")
 	plt.xlabel("x")
 
-	plt.savefig('/home/husky/catkin_ws/plots/ekf_odom_kvhgyro.pdf')
+	plt.savefig('/home/husky/catkin_ws/plots/ekf_odom_midg_imu.pdf')
 
 
 def MatMul(mat1, mat2):
@@ -225,13 +234,13 @@ def MatMul(mat1, mat2):
 
 def main():
 	#initialize node
-	rospy.init_node("publish_odom_kvh_ekf_pose", anonymous=True)
+	rospy.init_node("publish_odom_imu_ekf_pose", anonymous=True)
 
 	#sub to raw odometry node (/odom)
 	rospy.Subscriber("/husky_velocity_controller/odom", Odometry, odomCallback)
 
 	#sub to simulated imu data
-	rospy.Subscriber("/dsp3000_rate", Float32, gyroCallback)
+	rospy.Subscriber("/MIDG_IMU", Imu, imuCallback)
 
 	#sub to filtered odometry node (/odom)
 	rospy.Subscriber("/odometry/filtered", Odometry, odomFilteredCallback)
@@ -242,7 +251,7 @@ if __name__ == '__main__':
 
 	
 	
-	print("start fusing odometry and imu to estimate pose...")
+	print("start fusing odometry and midg imu to estimate pose...")
 	main()
 	rospy.spin() 	#keep the program running until ctrl-c
 	plot_data()		#plot and saves it after exiting the program 
