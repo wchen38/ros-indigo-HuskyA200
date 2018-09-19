@@ -25,15 +25,15 @@ x_filtered_rec = []
 y_filtered_rec = []
 
 #parameters
-alpha1 = 0.5
-alpha2 = 0.4
+alpha1 = 0.2
+alpha2 = 0.03
 alpha3 = 0.1
-alpha4 = 0.1
+alpha4 = 0.9
 
 #covariance Q, measurement noise (eq. 7.15)
 #temp1 = [0.9**2, 0.9**2, 0.5**2, 0.01**2];
 temp1 = [0.9**2, 0.9**2, 0.5**2, 0.01**2];
-Qt = 1**2
+Qt = 0.01**2
 
 #initial guess of the pose
 X = numpy.array([
@@ -144,8 +144,8 @@ def odomCallback(msg):
 	#update the covarence
 	P =MatMul((numpy.identity(4) - MatMul(Kt,Ht)), Pm);
 
-	P = Pm
-	X = Xm 
+	Pm = P
+	Xm = X 
 	x_est_rec.append(X[0])
 	y_est_rec.append(X[1])
 	x_odom_rec.append(x)
@@ -192,7 +192,7 @@ def plot_data():
 	plt.ylabel("y")
 	plt.xlabel("x")
 
-	plt.savefig('/home/husky/catkin_ws/plots/ekf_odom_imu.pdf')
+	plt.savefig('/home/husky/catkin_ws/plots/ekf_odom_gyro.pdf')
 
 
 def MatMul(mat1, mat2):

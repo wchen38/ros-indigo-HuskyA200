@@ -10,13 +10,14 @@ from sensor_msgs.msg import LaserScan
 from laser_line_extraction.msg import LineSegmentList
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
+from sensor_msgs.msg import NavSatFix
 from sensor_msgs.msg import Imu
 from huskybot_ekf.msg import *
 from tf.transformations import euler_from_quaternion
 
 w = 0
 a = 0
-dt = 0.0201
+dt = 0.020
 x_est_rec = []
 y_est_rec = []
 x_odom_rec = []
@@ -34,18 +35,17 @@ true_x = 0
 true_y = 0
 true_x_rec = []
 true_y_rec = []
+gps_status = -1
+GPS_HAS_FIX = 0
 
 #parameters
-alpha1 = 0.5
-alpha2 = 0.4
-alpha3 = 0.1
-alpha4 = 0.1
+alpha1 = 5
+alpha2 = 5
+alpha3 = 5
+alpha4 = 5
 
-#covariance Q, measurement noise (eq. 7.15)
-#temp1 = [0.9**2, 0.9**2, 0.5**2, 0.01**2];
-temp1 = [0.9**2, 0.9**2];
-Qt = Qt = numpy.diag(temp1);
-#Qt = 1**2
+
+
 
 #initial guess of the pose
 X = numpy.array([
@@ -56,17 +56,15 @@ X = numpy.array([
 				])
 Xm = X
 #initial guess of the covariance of the state vector
-cov = [0.01**2, 0.01**2, 0.01**2, 0.01**2];
+#cov = [0.01**2, 0.01**2, 0.01**2, 0.01**2];
+cov = [5**2, 5**2, 0.01**2, 0.01**2];
 P = numpy.diag(cov);
 Pm = P;
 
-#Ht is a Jacobian of the measurement model (eq. 7.14)
-# map the a priori state x_{k | k-1} into the observed space which is 
-#the measurement
-Ht = numpy.array([
-				[0, 0, 0, 1],
-				[0, 0, 0, 1]
-     			]);
+Qtmp = [0.1**2, 0.1**2, math.radians(1.0)**2, 1.0**2];
+QQ = numpy.diag(Qtmp);
+
+
 
 #the motion noise to be mapped into state space (eq. 7.11)
 Vt = numpy.array([
@@ -82,7 +80,7 @@ def odomCallback(msg):
 	global pub, w, a
 	global Qt, Vt, Ht, X, P, Pm, Xm
 	global x_est_rec, y_est_rec, x_odom_rec, y_odom_rec
-	global gps_x, gps_y, true_x, true_y
+	global gps_x, gps_y, true_x, true_y, GPS_HAS_FIX
 
 	prev_t = msg.header.stamp.secs + (msg.header.stamp.nsecs/1000000000.0)
 	#print prev_t
@@ -131,40 +129,113 @@ def odomCallback(msg):
 						]);
 
 	#predict the covarence
-	Pm = MatMul(MatMul(Gt,P), numpy.transpose(Gt)) + MatMul(MatMul(Vt,Mt), numpy.transpose(Vt));
+	#Pm = MatMul(MatMul(Gt,P), numpy.transpose(Gt)) + MatMul(MatMul(Vt,Mt), numpy.transpose(Vt));
+	Pm = MatMul(MatMul(Gt,P), numpy.transpose(Gt)) + QQ
 	
 	
-	#-------------update-------------------------------
-	#innovation_cov: predict how much we should trust the measurement 
-	#based on the a priori error covariance matrix P_{k | k-1} and 
-	#the measurement covariance matrix R
+	
+	if(gps_status == GPS_HAS_FIX):
+		#print "odom + gypro + gps ekf"
+		#covariance Q, measurement noise (eq. 7.15)
+		#temp1 = [0.9**2, 0.9**2, 0.5**2, 0.01**2];
+		temp1 = [1.0, math.radians(40)**2, 1, 1];
+		Qt = Qt = numpy.diag(temp1);
+		#Qt = 1**2
 
-	innovation_cov = MatMul(MatMul(Ht,Pm),numpy.transpose(Ht)) + Qt; 
+		#Ht is a Jacobian of the measurement model (eq. 7.14)
+		# map the a priori state x_{k | k-1} into the observed space which is 
+		#the measurement
+		Ht = numpy.array([
+						[1, 0, 0, 0],
+						[0, 1, 0, 0],
+						[0, 0, 0, 1],
+						[0, 0, 0, 1]
+		     			]);
 
-	#tt = MatMul(Pm,Ht)
-	#tt1 = numpy.reshape(tt)
-	#print tt1.shape
-	#The Kalman gain is used to to indicate how much we trust the innovation
-	Kt = MatMul(MatMul(Pm, numpy.transpose(Ht)),numpy.linalg.inv(innovation_cov));
+		
+		#-------------update-------------------------------
+		#innovation_cov: predict how much we should trust the measurement 
+		#based on the a priori error covariance matrix P_{k | k-1} and 
+		#the measurement covariance matrix R
 
-	#measurement model
-	z = numpy.array([
-					[odom_w],
-					[w]
-					])
-      
-	#expected measurements from our prediction
+		innovation_cov = MatMul(MatMul(Ht,Pm),numpy.transpose(Ht)) + Qt; 
+		#print innovation_cov
+		#tt = MatMul(Pm,Ht)
+		#tt1 = numpy.reshape(tt)
+		#print tt1.shape
+		#The Kalman gain is used to to indicate how much we trust the innovation
+		Kt = MatMul(MatMul(Pm, numpy.transpose(Ht)),numpy.linalg.inv(innovation_cov));
 
-	z_exp_temp = numpy.array([
-						[Xm[3]],
-						[Xm[3]]
+		#measurement model
+		z = numpy.array([
+						[gps_x],
+						[gps_y],
+						[odom_w],
+						[w]
 						])
-	z_exp = numpy.squeeze(z_exp_temp, axis=(2,))
-	#innovation, difference between what we observe and what we expect
-	innovation_temp = z - z_exp;
-	#print z_exp.shape
-	innovation = numpy.reshape(innovation_temp, (2,1))
+		
 	
+		#expected measurements from our prediction
+
+		z_exp_temp = numpy.array([
+							[Xm[0]],
+							[Xm[1]],
+							[Xm[3]],
+							[Xm[3]]
+							])
+		z_exp = numpy.squeeze(z_exp_temp, axis=(2,))
+		#innovation, difference between what we observe and what we expect
+		innovation_temp = z - z_exp;
+		#print z_exp.shape
+		innovation = numpy.reshape(innovation_temp, (4,1))
+		#print innovation
+	else:
+		print "odom + gypro ekf"
+		#covariance Q, measurement noise (eq. 7.15)
+		#temp1 = [0.9**2, 0.9**2, 0.5**2, 0.01**2];
+		temp1 = [0.9**2, 0.9**2];
+		Qt = Qt = numpy.diag(temp1);
+		#Qt = 1**2
+		
+		#Ht is a Jacobian of the measurement model (eq. 7.14)
+		# map the a priori state x_{k | k-1} into the observed space which is 
+		#the measurement
+		Ht = numpy.array([
+						[0, 0, 0, 1],
+						[0, 0, 0, 1]
+		     			]);
+		
+		#-------------update-------------------------------
+		#innovation_cov: predict how much we should trust the measurement 
+		#based on the a priori error covariance matrix P_{k | k-1} and 
+		#the measurement covariance matrix R
+
+		innovation_cov = MatMul(MatMul(Ht,Pm),numpy.transpose(Ht)) + Qt; 
+
+		#tt = MatMul(Pm,Ht)
+		#tt1 = numpy.reshape(tt)
+		#print tt1.shape
+		#The Kalman gain is used to to indicate how much we trust the innovation
+		Kt = MatMul(MatMul(Pm, numpy.transpose(Ht)),numpy.linalg.inv(innovation_cov));
+
+		#measurement model
+		z = numpy.array([
+						[odom_w],
+						[w]
+						])
+	      
+		#expected measurements from our prediction
+
+		z_exp_temp = numpy.array([
+							[Xm[3]],
+							[Xm[3]]
+							])
+		z_exp = numpy.squeeze(z_exp_temp, axis=(2,))
+		#innovation, difference between what we observe and what we expect
+		innovation_temp = z - z_exp;
+		#print z_exp.shape
+		innovation = numpy.reshape(innovation_temp, (2,1))
+
 	#print Kt.shape, innovation.shape
 	#update the pose
 	X = Xm + MatMul(Kt, innovation);
@@ -173,8 +244,8 @@ def odomCallback(msg):
 	#update the covarence
 	P =MatMul((numpy.identity(4) - MatMul(Kt,Ht)), Pm);
 
-	P = Pm
-	X = Xm 
+	Pm = P
+	Xm = X 
 	x_est_rec.append(X[0])
 	y_est_rec.append(X[1])
 	x_odom_rec.append(x)
@@ -199,18 +270,23 @@ def odomFilteredCallback(msg):
 
 def gpsOdomCallback(msg):
 	global gps_x, gps_y, gps_flag, orign_x, orign_y
-	if (gps_flag != 0):
-		gps_y = -(msg.pose.pose.position.x - orign_x)
-		gps_x = msg.pose.pose.position.y - orign_y
-	else:
+	if (gps_flag == 0):
 		orign_x = msg.pose.pose.position.x
 		orign_y = msg.pose.pose.position.y
 		gps_flag = 1
+
+	gps_y = -(msg.pose.pose.position.x - orign_x)
+	gps_x = msg.pose.pose.position.y - orign_y
 
 def groundTruthCallback(msg):
 	global true_x, true_y
 	true_x = msg.pose.pose.position.x
 	true_y = msg.pose.pose.position.y
+
+def gpsCallback(msg):
+	global gps_status
+	gps_status = msg.status.status
+	#gps_status = 1
 
 def plot_data():
 	# Plotting the predicted and updated state estimates as well as the uncertainty ellipse to see if 
@@ -228,11 +304,11 @@ def plot_data():
 	plt.show()
 
 	# Update is plotted as blue points. 
-	plt.plot(x_est_rec,y_est_rec,'b')
+	plt.plot(x_est_rec,y_est_rec,'*')
 	plt.plot(x_odom_rec, y_odom_rec, 'r')
-	#plt.plot(x_filtered_rec, y_filtered_rec, 'g')
-	plt.plot(gps_x_rec, gps_y_rec, '^')
-	plt.plot(true_x_rec, true_y_rec, 'g')
+	plt.plot(x_filtered_rec, y_filtered_rec, 'r')
+	plt.plot(gps_x_rec, gps_y_rec, 'g')
+	#plt.plot(true_x_rec, true_y_rec, 'g')
 	
 	
 	plt.ylabel("y")
@@ -277,6 +353,9 @@ def main():
 
 	#sub to ground truth of the robot (/ground_truth/state)
 	rospy.Subscriber("/ground_truth/state", Odometry, groundTruthCallback)
+
+	#sub to gps (/ground_truth/state)
+	rospy.Subscriber("/navsat/fix", NavSatFix, gpsCallback)
 
 
 

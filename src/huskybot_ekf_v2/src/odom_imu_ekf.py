@@ -163,8 +163,8 @@ def odomCallback(msg):
 	#update the covarence
 	P =MatMul((numpy.identity(6) - MatMul(Kt,Ht)), Pm);
 
-	P = Pm
-	X = Xm 
+	Pm = P
+	Xm = X
 	x_est_rec.append(X[0])
 	y_est_rec.append(X[1])
 	x_odom_rec.append(x)
