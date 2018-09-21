@@ -146,7 +146,7 @@ def odomCallback(msg):
 					])
       
 	#expected measurements from our prediction
-	z_exp = numpy.array([
+	z_exp_tmp = numpy.array([
 						[Xm[3]],
 						[Xm[4]],
 						[Xm[4]],
@@ -154,10 +154,13 @@ def odomCallback(msg):
 						])
 	
 	#innovation, difference between what we observe and what we expect
+	#innovation = z - z_exp;
+	z_exp = numpy.reshape(z_exp_tmp, (4,1))
+	
 	innovation = z - z_exp;
 	
 	#update the pose
-	X = Xm + MatMul(Kt, numpy.squeeze(innovation));
+	X = Xm + MatMul(Kt, innovation);
 	X[3] = ( X[3] + numpy.pi) % (2 * numpy.pi ) - numpy.pi
       
 	#update the covarence
