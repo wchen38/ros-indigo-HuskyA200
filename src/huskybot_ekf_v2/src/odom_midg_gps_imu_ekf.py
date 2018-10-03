@@ -11,12 +11,13 @@ from laser_line_extraction.msg import LineSegmentList
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
+from sensor_msgs.msg import NavSatFix
 from huskybot_ekf.msg import *
 from tf.transformations import euler_from_quaternion
 
 w = 0
 a = 0
-dt = 0.1
+dt = 0.02
 x_est_rec = []
 y_est_rec = []
 x_odom_rec = []
@@ -24,16 +25,27 @@ y_odom_rec = []
 x_filtered_rec = []
 y_filtered_rec = []
 
+#gps vars
+gps_x=0
+gps_y=0 
+gps_flag = 0
+orign_x=0 
+orign_y = 0
+gps_status = -1
+GPS_HAS_FIX = 0
+gps_x_rec=[]
+gps_y_rec = []
+
 #parameters
 alpha1 = 0.5
 alpha2 = 0.4
 alpha3 = 0.1
 alpha4 = 0.1
 
-#covariance Q, measurement noise (eq. 7.15)
-#temp1 = [0.9**2, 0.9**2, 0.5**2, 0.01**2];
-temp1 = [0.9**2, 0.9**2, 0.5**2, 0.01**2];
-Qt = numpy.diag(temp1); 
+# #covariance Q, measurement noise (eq. 7.15)
+# #temp1 = [0.9**2, 0.9**2, 0.5**2, 0.01**2];
+# temp1 = [0.9**2, 0.9**2, 0.5**2, 0.01**2];
+# Qt = numpy.diag(temp1); 
 
 #initial guess of the pose
 X = numpy.array([
@@ -50,15 +62,7 @@ cov = [0.01**2, 0.01**2, 0.01**2, 0.01**2, 0.01**2, 0.01**2];
 P = numpy.diag(cov);
 Pm = P;
 
-#Ht is a Jacobian of the measurement model (eq. 7.14)
-# map the a priori state x_{k | k-1} into the observed space which is 
-#the measurement
-Ht = numpy.array([
-				[0, 0, 0, 1, 0, 0],
-     			[0, 0, 0, 0, 1, 0],
-     			[0, 0, 0, 0, 1, 0],
-     			[0, 0, 0, 0, 0, 1]
-     			]);
+
 
 #the motion noise to be mapped into state space (eq. 7.11)
 Vt = numpy.array([
@@ -74,8 +78,10 @@ Xrec = []; #record all the pose inorder to plot later
 
 def odomCallback(msg):
 	global pub, w, a
-	global Qt, Vt, Ht, X, P, Pm, Xm
+	global Vt, X, P, Pm, Xm
 	global x_est_rec, y_est_rec, x_odom_rec, y_odom_rec
+	global gps_x, gps_y, GPS_HAS_FIX, gps_status, gps_x_rec, gps_y_rec
+
 
 
 	x = msg.pose.pose.position.x
@@ -120,14 +126,85 @@ def odomCallback(msg):
 	#predict the covarence
 	Pm = MatMul(MatMul(Gt,P), numpy.transpose(Gt)) + MatMul(MatMul(Vt,Mt), numpy.transpose(Vt));
 	
+
+
+	if(gps_status != GPS_HAS_FIX):
+		#covariance Q, measurement noise (eq. 7.15)
+		#temp1 = [0.9**2, 0.9**2, 0.5**2, 0.01**2];
+		temp1 = [0.9**2, 0.9**2, 0.5**2, 0.01**2];
+		Qt = numpy.diag(temp1); 
+
+		#Ht is a Jacobian of the measurement model (eq. 7.14)
+		# map the a priori state x_{k | k-1} into the observed space which is 
+		#the measurement
+		Ht = numpy.array([
+				[0, 0, 0, 1, 0, 0],
+     			[0, 0, 0, 0, 1, 0],
+     			[0, 0, 0, 0, 1, 0],
+     			[0, 0, 0, 0, 0, 1]
+     			]);
 	
 	#-------------update-------------------------------
 	#innovation_cov: predict how much we should trust the measurement 
 	#based on the a priori error covariance matrix P_{k | k-1} and 
 	#the measurement covariance matrix R
 
-	innovation_cov = MatMul(MatMul(Ht,Pm),numpy.transpose(Ht)) + Qt; 
+		innovation_cov = MatMul(MatMul(Ht,Pm),numpy.transpose(Ht)) + Qt; 
 
+		z = numpy.array([
+					[v],
+					[odom_w],
+					[w],
+					[a]
+					])
+      
+		#expected measurements from our prediction
+		z_exp_tmp = numpy.array([
+						[Xm[3]],
+						[Xm[4]],
+						[Xm[4]],
+						[Xm[5]]
+						])
+	
+	#innovation, difference between what we observe and what we expect
+	
+		z_exp = numpy.reshape(z_exp_tmp, (4,1))
+	
+		innovation = z - z_exp;
+	else:
+		temp1 = [0.01**2, 0.01**2, 0.9**2, 0.9**2, 0.5**2, 0.01**2];
+		Qt = Qt = numpy.diag(temp1);
+
+		Ht = numpy.array([
+				[1, 0, 0, 0, 0, 0],
+				[0, 1, 0, 0, 0, 0],
+				[0, 0, 0, 1, 0, 0],
+     			[0, 0, 0, 0, 1, 0],
+     			[0, 0, 0, 0, 1, 0],
+     			[0, 0, 0, 0, 0, 1]
+     			]);
+
+		innovation_cov = MatMul(MatMul(Ht,Pm),numpy.transpose(Ht)) + Qt; 
+
+		z = numpy.array([
+					[gps_x],
+					[gps_y],
+					[v],
+					[odom_w],
+					[w],
+					[a]
+					])
+
+		z_exp_tmp = numpy.array([
+						[Xm[0]],
+						[Xm[1]],
+						[Xm[3]],
+						[Xm[4]],
+						[Xm[4]],
+						[Xm[5]]
+						])
+		z_exp = numpy.reshape(z_exp_tmp, (6,1))
+		innovation = z - z_exp;
 	#tt = MatMul(Pm,Ht)
 	#tt1 = numpy.reshape(tt)
 	#print tt1.shape
@@ -139,26 +216,7 @@ def odomCallback(msg):
 	#print "---------"
 	#print (numpy.linalg.inv(innovation_cov)).shape
 	#measurement model
-	z = numpy.array([
-					[v],
-					[odom_w],
-					[w],
-					[a]
-					])
-      
-	#expected measurements from our prediction
-	z_exp_tmp = numpy.array([
-						[Xm[3]],
-						[Xm[4]],
-						[Xm[4]],
-						[Xm[5]]
-						])
-	
-	#innovation, difference between what we observe and what we expect
-	
-	z_exp = numpy.reshape(z_exp_tmp, (4,1))
-	
-	innovation = z - z_exp;
+
 	
 	#print innovation
 	#update the pose
@@ -176,6 +234,8 @@ def odomCallback(msg):
 	y_est_rec.append(-X[1])
 	x_odom_rec.append(x)
 	y_odom_rec.append(y)
+	gps_x_rec.append(gps_x)
+	gps_y_rec.append(gps_y)
 
 
 
@@ -194,6 +254,22 @@ def odomFilteredCallback(msg):
 	(roll,pitch,yaw) = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])
 	x_filtered_rec.append(x)
 	y_filtered_rec.append(y)
+
+def gpsCallback(msg):
+	global gps_status
+	gps_status = msg.status.status
+	#gps_status = 1
+
+def gpsOdomCallback(msg):
+	global gps_x, gps_y, gps_flag, orign_x, orign_y
+	if (gps_flag == 0):
+		orign_x = msg.pose.pose.position.x
+		orign_y = msg.pose.pose.position.y
+		gps_flag = 1
+
+	gps_y = -(msg.pose.pose.position.x - orign_x)
+	gps_x = msg.pose.pose.position.y - orign_y
+
 
 def plot_data():
 	# Plotting the predicted and updated state estimates as well as the uncertainty ellipse to see if 
@@ -214,12 +290,13 @@ def plot_data():
 	plt.plot(x_est_rec,y_est_rec,'b')
 	plt.plot(x_odom_rec, y_odom_rec, 'r')
 	plt.plot(x_filtered_rec, y_filtered_rec, 'g')
+	plt.plot(gps_x_rec, gps_y_rec, 'g')
 	
 	
 	plt.ylabel("y")
 	plt.xlabel("x")
 
-	plt.savefig('/home/husky/catkin_ws/plots/ekf_odom_MIDG_imu.pdf')
+	plt.savefig('/home/husky/catkin_ws/plots/ekf_odom_MIDG_gps_imu.pdf')
 
 
 def MatMul(mat1, mat2):
@@ -248,21 +325,26 @@ def main():
 	rospy.Subscriber("/husky_velocity_controller/odom", Odometry, odomCallback)
 
 	#sub to simulated imu data
-	#rospy.Subscriber("/imu/data", Imu, imuCallback)
+	rospy.Subscriber("/imu/data", Imu, imuCallback)
 
 	#sub to MIDG Ii imu data /MIDG_IMU
-	rospy.Subscriber("/MIDG_IMU", Imu, imuCallback)
+	#rospy.Subscriber("MIDG_IMU", Imu, imuCallback)
 
 	#sub to filtered odometry node (/odom)
 	rospy.Subscriber("/odometry/filtered", Odometry, odomFilteredCallback)
 
+	#sub to gps
+	rospy.Subscriber("/navsat/fix", NavSatFix, gpsCallback)
+
+	#sub to positoin from gps_common package (/odom)
+	rospy.Subscriber("/odom", Odometry, gpsOdomCallback)
 
 
 if __name__ == '__main__':
 
 	
 	
-	print("start fusing odometry and MIDG II imu to estimate pose...")
+	print("start fusing odometry and MIDG gps imu to estimate pose...")
 	main()
 	rospy.spin() 	#keep the program running until ctrl-c
 	plot_data()		#plot and saves it after exiting the program 
