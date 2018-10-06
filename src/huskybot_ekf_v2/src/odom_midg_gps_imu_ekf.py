@@ -12,18 +12,22 @@ from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
 from sensor_msgs.msg import NavSatFix
-from huskybot_ekf.msg import *
+from huskybot_ekf_2.msg import *
 from tf.transformations import euler_from_quaternion
 
 w = 0
 a = 0
-dt = 0.02
+#dt = 0.02 #simulation
+dt = 0.1 # real husky
 x_est_rec = []
 y_est_rec = []
 x_odom_rec = []
 y_odom_rec = []
 x_filtered_rec = []
 y_filtered_rec = []
+
+custom_x_rec = []
+custom_y_rec = []
 
 #gps vars
 gps_x=0
@@ -36,11 +40,16 @@ GPS_HAS_FIX = 0
 gps_x_rec=[]
 gps_y_rec = []
 
-#parameters
+#parameters set 1
 alpha1 = 0.5
 alpha2 = 0.4
 alpha3 = 0.1
 alpha4 = 0.1
+
+alpha1 = 0.5
+alpha2 = 1.0
+alpha3 = 1.4
+alpha4 = 1.9
 
 # #covariance Q, measurement noise (eq. 7.15)
 # #temp1 = [0.9**2, 0.9**2, 0.5**2, 0.01**2];
@@ -81,6 +90,7 @@ def odomCallback(msg):
 	global Vt, X, P, Pm, Xm
 	global x_est_rec, y_est_rec, x_odom_rec, y_odom_rec
 	global gps_x, gps_y, GPS_HAS_FIX, gps_status, gps_x_rec, gps_y_rec
+	global custom_x_rec, custom_y_rec
 
 
 
@@ -131,7 +141,7 @@ def odomCallback(msg):
 	if(gps_status != GPS_HAS_FIX):
 		#covariance Q, measurement noise (eq. 7.15)
 		#temp1 = [0.9**2, 0.9**2, 0.5**2, 0.01**2];
-		temp1 = [0.9**2, 0.9**2, 0.5**2, 0.01**2];
+		temp1 = [10**2, 0.9**2, 0.5**2, 0.01**2];
 		Qt = numpy.diag(temp1); 
 
 		#Ht is a Jacobian of the measurement model (eq. 7.14)
@@ -270,6 +280,13 @@ def gpsOdomCallback(msg):
 	gps_y = -(msg.pose.pose.position.x - orign_x)
 	gps_x = msg.pose.pose.position.y - orign_y
 
+def motionModelVelCallback(msg):
+	global custom_x_rec, custom_y_rec
+	custom_x = msg.x
+	custom_y = msg.y
+	custom_th = msg.theta
+	custom_x_rec.append(custom_x)
+	custom_y_rec.append(custom_y)
 
 def plot_data():
 	# Plotting the predicted and updated state estimates as well as the uncertainty ellipse to see if 
@@ -289,6 +306,7 @@ def plot_data():
 	# Update is plotted as blue points. 
 	plt.plot(x_est_rec,y_est_rec,'b')
 	plt.plot(x_odom_rec, y_odom_rec, 'r')
+	plt.plot(custom_x_rec, custom_y_rec, 'r')
 	plt.plot(x_filtered_rec, y_filtered_rec, 'g')
 	plt.plot(gps_x_rec, gps_y_rec, 'g')
 	
@@ -324,11 +342,14 @@ def main():
 	#sub to raw odometry node (/odom)
 	rospy.Subscriber("/husky_velocity_controller/odom", Odometry, odomCallback)
 
+		#sub to positoin from gps_common package (/odom)
+	rospy.Subscriber("/publish_motion_model_velocity", pose_msg, motionModelVelCallback)
+
 	#sub to simulated imu data
-	rospy.Subscriber("/imu/data", Imu, imuCallback)
+	#rospy.Subscriber("/imu/data", Imu, imuCallback)
 
 	#sub to MIDG Ii imu data /MIDG_IMU
-	#rospy.Subscriber("MIDG_IMU", Imu, imuCallback)
+	rospy.Subscriber("MIDG_IMU", Imu, imuCallback)
 
 	#sub to filtered odometry node (/odom)
 	rospy.Subscriber("/odometry/filtered", Odometry, odomFilteredCallback)

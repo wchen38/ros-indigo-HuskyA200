@@ -16,14 +16,14 @@ from tf.transformations import euler_from_quaternion
 
 
 
-a1 = 0.01
-a2 = 0.01 
-a3 = 0.01
-a4 = 0.01
-a5 = 0.1
+a1 = 0.5
+a2 = 0.5 
+a3 = 0.5
+a4 = 0.5
+a5 = 0.5
 a6 = 0.1
-#DT = 0.03 #simulation
-DT = 0.11 #real husky 
+#DT = 0.02 #simulation
+DT = 0.1 #real husky 
 
 #inital guess
 estX = 0
@@ -61,7 +61,7 @@ def odomCallback(msg):
 	#linear and angular velocity from odometry
 	v = msg.twist.twist.linear.x 
 	w = msg.twist.twist.angular.z
-
+	print v, w
 	#table 5.3 chapter 5
 	vHat = v + numpy.random.normal(0, a1*(v**2) + a2*(w**2)) 
 	wHat = w + numpy.random.normal(0, a3*(v**2) + a4*(w**2)) 

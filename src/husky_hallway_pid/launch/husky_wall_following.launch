@@ -4,5 +4,5 @@
 
      <node pkg="husky_hallway_pid" name="dist_scan" type="dist_scan.py" output="screen"/>
 
-     <node pkg="husky_hallway_pid" name="control" type="control.py" output="screen"/>
+     <node pkg="husky_hallway_pid" name="control" type="control_real.py" output="screen"/>
 </launch>

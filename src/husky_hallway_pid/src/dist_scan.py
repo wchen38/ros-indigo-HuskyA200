@@ -21,10 +21,10 @@ def callback(msg):
 	#at zero degrees and 180 degrees
 	theta = math.pi/4						#45 degrees in radians 
 	b = msg.ranges[0] 						# zero degrees
-	#print b
+	
 	a = msg.ranges[179]						# 45 degrees
 	range_180_deg = msg.ranges[719] 		# 180 degrees
-	
+	#print a, b
 	
 	#calculating the error after driving for about 1 meter
 	alpha = math.atan((a*math.cos(theta)-b)/(a*math.sin(theta)))
@@ -32,7 +32,7 @@ def callback(msg):
 	CD = AB + AC*math.sin(alpha)
 	error = CD - DESIRE_DIST  
 	pid_msg = pid_input()
-	pid_msg.pid_error = error
+	pid_msg.pid_error = error 
 	pub.publish(pid_msg)		
 	dist = 0							#reset travel distance
 
